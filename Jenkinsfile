@@ -46,40 +46,18 @@ pipeline {
             }
         }
         
-        stage('Check Credentials') {
-            steps {
-                script {
-                    echo "🔐 Checking AWS Credentials..."
-                    
-                    // 简化检查 - 直接尝试使用凭据
-                    try {
-                        withCredentials([
-                            string(credentialsId: 'aws-access-key', variable: 'AWS_ACCESS_KEY_ID'),
-                            string(credentialsId: 'aws-secret-key', variable: 'AWS_SECRET_ACCESS_KEY')
-                        ]) {
-                            echo "✅ SUCCESS: Both AWS credentials found and accessible"
-                            echo "Using: aws-access-key and aws-secret-key"
-                        }
-                    } catch (Exception e) {
-                        echo "❌ ERROR: ${e.getMessage()}"
-                        currentBuild.result = 'FAILURE'
-                        error("AWS credentials configuration error")
-                    }
-                }
-            }
-        }
-        
         stage('ECR Login') {
             steps {
                 script {
                     echo "🐳 Attempting ECR Login..."
                 }
-                withCredentials([
-                    string(credentialsId: 'aws-access-key', variable: 'AWS_ACCESS_KEY_ID'),
-                    string(credentialsId: 'aws-secret-key', variable: 'AWS_SECRET_ACCESS_KEY')
-                ]) {
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY',
+                    credentialsId: 'dev-user-aws-credentials'
+                ]]) {
                     sh """
-                        # 设置环境变量
                         export AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID"
                         export AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY"
                         export AWS_DEFAULT_REGION=${AWS_REGION}
@@ -136,10 +114,12 @@ pipeline {
         
         stage('Deploy to EKS') {
             steps {
-                withCredentials([
-                    string(credentialsId: 'aws-access-key', variable: 'AWS_ACCESS_KEY_ID'),
-                    string(credentialsId: 'aws-secret-key', variable: 'AWS_SECRET_ACCESS_KEY')
-                ]) {
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY',
+                    credentialsId: 'dev-user-aws-credentials'
+                ]]) {
                     sh """
                         export AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID"
                         export AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY"
@@ -175,10 +155,12 @@ pipeline {
         
         stage('Verify Deployment') {
             steps {
-                withCredentials([
-                    string(credentialsId: 'aws-access-key', variable: 'AWS_ACCESS_KEY_ID'),
-                    string(credentialsId: 'aws-secret-key', variable: 'AWS_SECRET_ACCESS_KEY')
-                ]) {
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY',
+                    credentialsId: 'dev-user-aws-credentials'
+                ]]) {
                     sh """
                         export AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID"
                         export AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY"
