@@ -46,11 +46,8 @@ pipeline {
             }
         }
         
-        stage('ECR Login') {
+        stage('Build and Push with Kaniko') {
             steps {
-                script {
-                    echo "🐳 Attempting ECR Login..."
-                }
                 withCredentials([[
                     $class: 'AmazonWebServicesCredentialsBinding',
                     accessKeyVariable: 'AWS_ACCESS_KEY_ID',
@@ -58,32 +55,21 @@ pipeline {
                     credentialsId: 'dev-user-aws-credentials'
                 ]]) {
                     sh """
-                        export AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID"
-                        export AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY"
-                        export AWS_DEFAULT_REGION=${AWS_REGION}
+                        # 使用 Kaniko 构建和推送镜像（无需 Docker 守护进程）
+                        docker run --rm \
+                        -e AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
+                        -e AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
+                        -v \$(pwd):/workspace \
+                        -w /workspace \
+                        gcr.io/kaniko-project/executor:latest \
+                        --dockerfile=docker/Dockerfile \
+                        --destination=${DOCKER_REGISTRY}/${DOCKER_IMAGE}:${IMAGE_TAG} \
+                        --context=dir:///workspace \
+                        --cache=true
                         
-                        echo "🔑 Testing AWS credentials..."
-                        aws sts get-caller-identity
-                        echo "✅ AWS credentials test passed"
-                        
-                        echo "🚪 Logging into ECR..."
-                        aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${DOCKER_REGISTRY}
-                        echo "✅ ECR login successful!"
+                        echo "✅ Image built and pushed with Kaniko"
                     """
                 }
-            }
-        }
-        
-        stage('Build Docker Image') {
-            steps {
-                script {
-                    echo "🏗️ Building Docker image..."
-                }
-                sh """
-                    docker build -t ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:${IMAGE_TAG} -f docker/Dockerfile .
-                    docker tag ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:${IMAGE_TAG} ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:latest
-                    echo "✅ Docker image built and tagged"
-                """
             }
         }
         
@@ -96,19 +82,6 @@ pipeline {
                     echo "🧪 Running tests..."
                 }
                 sh 'python -m pytest tests/ -v || echo "⚠️ Tests completed"'
-            }
-        }
-        
-        stage('Push to ECR') {
-            steps {
-                script {
-                    echo "📤 Pushing to ECR..."
-                }
-                sh """
-                    docker push ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:${IMAGE_TAG}
-                    docker push ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:latest
-                    echo "✅ Images pushed to ECR"
-                """
             }
         }
         
