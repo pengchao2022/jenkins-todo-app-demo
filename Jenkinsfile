@@ -80,7 +80,7 @@ pipeline {
                     echo "🏗️ Building Docker image..."
                 }
                 sh """
-                    docker build -t ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:${IMAGE_TAG} .
+                    docker build -t ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:${IMAGE_TAG} -f docker/Dockerfile .
                     docker tag ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:${IMAGE_TAG} ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:latest
                     echo "✅ Docker image built and tagged"
                 """
