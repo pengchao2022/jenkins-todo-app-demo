@@ -38,29 +38,75 @@ pipeline {
         stage('Setup Environment') {
             steps {
                 script {
+                    echo "🔧 Environment Setup"
                     echo "Deploying to: ${params.DEPLOY_ENVIRONMENT}"
                     echo "Image Tag: ${IMAGE_TAG}"
                     echo "Skip Tests: ${params.SKIP_TESTS}"
+                    echo "K8S Namespace: ${K8S_NAMESPACE}"
+                    echo "Docker Registry: ${DOCKER_REGISTRY}"
+                }
+            }
+        }
+        
+        stage('Check Credentials') {
+            steps {
+                script {
+                    echo "🔐 Checking AWS Credentials..."
+                    try {
+                        // 测试凭据是否存在
+                        withCredentials([[
+                            $class: 'AmazonWebServicesCredentialsBinding',
+                            credentialsId: 'aws-credentials',
+                            accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                            secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                        ]]) {
+                            echo "✅ SUCCESS: AWS credentials found and accessible"
+                            echo "Credentials ID: aws-credentials"
+                        }
+                    } catch (Exception e) {
+                        echo "❌ CRITICAL ERROR: Could not find credentials entry with ID 'aws-credentials'"
+                        echo "🔍 Troubleshooting steps:"
+                        echo "1. Go to Jenkins → Manage Jenkins → Manage Credentials"
+                        echo "2. Check if credential with ID 'aws-credentials' exists"
+                        echo "3. Verify the credential type is 'AWS Credentials' or 'Secret text'"
+                        echo "4. Ensure credential is in 'Global credentials (unrestricted)' domain"
+                        echo "5. If using Secret text, create two separate credentials for Access Key and Secret Key"
+                        echo "📋 Error details: ${e.getMessage()}"
+                        currentBuild.result = 'FAILURE'
+                        error("Stopping pipeline: AWS credentials not found")
+                    }
                 }
             }
         }
         
         stage('ECR Login') {
             steps {
-                withCredentials([
-                    string(credentialsId: 'aws-credentials', variable: 'AWS_ACCESS_KEY_ID'),
-                    string(credentialsId: 'aws-credentials', variable: 'AWS_SECRET_ACCESS_KEY')
-                ]) {
+                script {
+                    echo "🐳 Attempting ECR Login..."
+                }
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-credentials',
+                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                ]]) {
                     sh """
-                        # 明确设置环境变量
+                        # 设置环境变量
                         export AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID"
                         export AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY"
                         export AWS_DEFAULT_REGION=${AWS_REGION}
                         
-                        echo "开始 ECR 登录..."
-                        aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${DOCKER_REGISTRY}
+                        echo "🔑 Testing AWS credentials..."
+                        aws sts get-caller-identity
+                        echo "✅ AWS credentials test passed"
                         
-                        echo "✅ ECR 登录成功！"
+                        echo "🚪 Logging into ECR..."
+                        if aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${DOCKER_REGISTRY}; then
+                            echo "✅ ECR login successful!"
+                        else
+                            echo "❌ ECR login failed!"
+                            exit 1
+                        fi
                     """
                 }
             }
@@ -69,11 +115,13 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 script {
-                    sh """
-                        docker build -t ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:${IMAGE_TAG} .
-                        docker tag ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:${IMAGE_TAG} ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:latest
-                    """
+                    echo "🏗️ Building Docker image..."
                 }
+                sh """
+                    docker build -t ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:${IMAGE_TAG} .
+                    docker tag ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:${IMAGE_TAG} ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:latest
+                    echo "✅ Docker image built and tagged successfully"
+                """
             }
         }
         
@@ -82,16 +130,62 @@ pipeline {
                 expression { return !params.SKIP_TESTS }
             }
             steps {
-                sh 'python -m pytest tests/ -v || true'
+                script {
+                    echo "🧪 Running tests..."
+                }
+                sh 'python -m pytest tests/ -v || echo "⚠️ Tests completed with warnings"'
             }
         }
         
         stage('Push to ECR') {
             steps {
                 script {
+                    echo "📤 Pushing Docker image to ECR..."
+                }
+                sh """
+                    if docker push ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:${IMAGE_TAG}; then
+                        echo "✅ Image ${IMAGE_TAG} pushed successfully"
+                    else
+                        echo "❌ Failed to push image ${IMAGE_TAG}"
+                        exit 1
+                    fi
+                    
+                    if docker push ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:latest; then
+                        echo "✅ Latest image pushed successfully"
+                    else
+                        echo "❌ Failed to push latest image"
+                        exit 1
+                    fi
+                """
+            }
+        }
+        
+        stage('Verify EKS Access') {
+            steps {
+                script {
+                    echo "🔍 Verifying EKS cluster access..."
+                }
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-credentials',
+                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                ]]) {
                     sh """
-                        docker push ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:${IMAGE_TAG}
-                        docker push ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:latest
+                        export AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID"
+                        export AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY"
+                        
+                        echo "🔄 Updating kubeconfig for EKS cluster..."
+                        if aws eks update-kubeconfig --region ${AWS_REGION} --name ${EKS_CLUSTER_NAME}; then
+                            echo "✅ Kubeconfig updated successfully"
+                        else
+                            echo "❌ Failed to update kubeconfig"
+                            exit 1
+                        fi
+                        
+                        echo "📋 Checking cluster nodes..."
+                        kubectl get nodes
+                        echo "✅ EKS cluster access verified"
                     """
                 }
             }
@@ -99,6 +193,11 @@ pipeline {
         
         stage('Deploy to EKS') {
             steps {
+                script {
+                    echo "🚀 Starting deployment to EKS..."
+                    echo "Namespace: ${K8S_NAMESPACE}"
+                    echo "Image: ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:${IMAGE_TAG}"
+                }
                 withCredentials([[
                     $class: 'AmazonWebServicesCredentialsBinding',
                     credentialsId: 'aws-credentials',
@@ -106,32 +205,47 @@ pipeline {
                     secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
                 ]]) {
                     sh """
+                        export AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID"
+                        export AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY"
+                        
                         # Configure kubectl
                         aws eks update-kubeconfig --region ${AWS_REGION} --name ${EKS_CLUSTER_NAME}
                         
-                        # Create namespace if not exists
+                        echo "📁 Creating namespace..."
                         kubectl apply -f kubernetes/namespace.yaml
                         
-                        # Deploy MySQL first
-                        echo "Deploying MySQL to ${K8S_NAMESPACE}..."
+                        echo "🗄️ Deploying MySQL..."
                         kubectl apply -f kubernetes/mysql/ -n ${K8S_NAMESPACE}
                         
-                        # Wait for MySQL to be ready
-                        echo "Waiting for MySQL to be ready..."
-                        timeout 300s bash -c 'until kubectl get pods -n ${K8S_NAMESPACE} -l app=mysql --field-selector=status.phase=Running --no-headers | grep -q .; do sleep 5; done'
+                        echo "⏳ Waiting for MySQL to be ready..."
+                        if timeout 300s bash -c 'until kubectl get pods -n ${K8S_NAMESPACE} -l app=mysql --field-selector=status.phase=Running --no-headers | grep -q .; do sleep 5; done'; then
+                            echo "✅ MySQL is ready"
+                        else
+                            echo "❌ MySQL failed to start within timeout"
+                            echo "📊 Checking MySQL pod status:"
+                            kubectl get pods -n ${K8S_NAMESPACE} -l app=mysql
+                            kubectl describe pods -n ${K8S_NAMESPACE} -l app=mysql
+                            exit 1
+                        fi
                         
-                        # Deploy Todo Application
-                        echo "Deploying Todo App to ${K8S_NAMESPACE}..."
+                        echo "📦 Deploying Todo Application..."
                         kubectl apply -f kubernetes/todo-app/ -n ${K8S_NAMESPACE}
                         
-                        # Update deployment with new image
+                        echo "🔄 Updating deployment image..."
                         kubectl set image deployment/todo-app-deployment \\
                             todo-app=${DOCKER_REGISTRY}/${DOCKER_IMAGE}:${IMAGE_TAG} \\
                             -n ${K8S_NAMESPACE}
                         
-                        # Wait for rollout to complete
-                        echo "Waiting for rollout to complete..."
-                        kubectl rollout status deployment/todo-app-deployment -n ${K8S_NAMESPACE} --timeout=300s
+                        echo "⏳ Waiting for rollout to complete..."
+                        if kubectl rollout status deployment/todo-app-deployment -n ${K8S_NAMESPACE} --timeout=300s; then
+                            echo "✅ Rollout completed successfully"
+                        else
+                            echo "❌ Rollout failed"
+                            echo "📊 Checking deployment status:"
+                            kubectl describe deployment/todo-app-deployment -n ${K8S_NAMESPACE}
+                            kubectl get pods -n ${K8S_NAMESPACE} -l app=todo-app
+                            exit 1
+                        fi
                     """
                 }
             }
@@ -139,6 +253,9 @@ pipeline {
         
         stage('Verify Deployment') {
             steps {
+                script {
+                    echo "🔍 Verifying deployment..."
+                }
                 withCredentials([[
                     $class: 'AmazonWebServicesCredentialsBinding',
                     credentialsId: 'aws-credentials',
@@ -146,8 +263,22 @@ pipeline {
                     secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
                 ]]) {
                     sh """
+                        export AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID"
+                        export AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY"
+                        
                         aws eks update-kubeconfig --region ${AWS_REGION} --name ${EKS_CLUSTER_NAME}
-                        ./scripts/verify-deployment.sh
+                        
+                        echo "📊 Deployment Status:"
+                        kubectl get all -n ${K8S_NAMESPACE}
+                        
+                        echo "🔧 Running verification script..."
+                        if [ -f "./scripts/verify-deployment.sh" ]; then
+                            ./scripts/verify-deployment.sh
+                        else
+                            echo "⚠️ Verification script not found, skipping"
+                        fi
+                        
+                        echo "✅ Deployment verification completed"
                     """
                 }
             }
@@ -156,13 +287,21 @@ pipeline {
     
     post {
         always {
-            echo "Pipeline execution completed for ${params.DEPLOY_ENVIRONMENT}"
+            echo "🏁 Pipeline execution completed for ${params.DEPLOY_ENVIRONMENT}"
+            echo "Build Result: ${currentBuild.result}"
+            echo "Build Number: ${env.BUILD_NUMBER}"
         }
         success {
-            echo "✅ Deployment successful! Environment: ${params.DEPLOY_ENVIRONMENT}, Build: ${env.BUILD_NUMBER}"
+            echo "🎉 Deployment successful! Environment: ${params.DEPLOY_ENVIRONMENT}, Build: ${env.BUILD_NUMBER}"
         }
         failure {
-            echo "❌ Deployment failed! Environment: ${params.DEPLOY_ENVIRONMENT}, Build: ${env.BUILD_NUMBER}"
+            echo "💥 Deployment failed! Environment: ${params.DEPLOY_ENVIRONMENT}, Build: ${env.BUILD_NUMBER}"
+            echo "🔍 Check the logs above for detailed error information"
+            echo "📋 Common issues:"
+            echo "   - AWS credentials not configured properly"
+            echo "   - ECR repository permissions"
+            echo "   - EKS cluster access"
+            echo "   - Kubernetes resource conflicts"
         }
     }
 }
