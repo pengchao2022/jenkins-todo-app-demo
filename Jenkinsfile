@@ -1,13 +1,31 @@
 pipeline {
     agent any
     
+    parameters {
+        choice(
+            name: 'DEPLOY_ENVIRONMENT',
+            choices: ['dev', 'staging', 'production'],
+            description: 'Select deployment environment'
+        )
+        string(
+            name: 'IMAGE_TAG',
+            defaultValue: 'latest',
+            description: 'Docker image tag to deploy'
+        )
+        booleanParam(
+            name: 'SKIP_TESTS',
+            defaultValue: false,
+            description: 'Skip running tests'
+        )
+    }
+    
     environment {
         AWS_REGION = 'us-east-1'
-        EKS_CLUSTER_NAME = 'todo-app-cluster'
+        EKS_CLUSTER_NAME = 'comic-website-prod'
         DOCKER_IMAGE = 'todo-app'
-        K8S_NAMESPACE = 'todo-app'
+        K8S_NAMESPACE = "todo-app-${params.DEPLOY_ENVIRONMENT}"
         DOCKER_REGISTRY = '319998871902.dkr.ecr.us-east-1.amazonaws.com'
-        IMAGE_TAG = "${env.BUILD_NUMBER}"
+        IMAGE_TAG = "${params.IMAGE_TAG == 'latest' ? env.BUILD_NUMBER : params.IMAGE_TAG}"
     }
     
     stages {
@@ -17,41 +35,27 @@ pipeline {
             }
         }
         
-        stage('Verify AWS Setup') {
+        stage('Setup Environment') {
             steps {
-                withCredentials([
-                    string(credentialsId: 'aws-access-key', variable: 'AWS_ACCESS_KEY_ID'),
-                    string(credentialsId: 'aws-secret-key', variable: 'AWS_SECRET_ACCESS_KEY')
-                ]) {
-                    sh '''
-                        echo "配置 AWS 环境变量..."
-                        export AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID"
-                        export AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" 
-                        export AWS_DEFAULT_REGION=us-east-1
-                        
-                        echo "测试 AWS 凭据..."
-                        aws sts get-caller-identity
-                        echo "✅ AWS 凭据工作正常！"
-                    '''
+                script {
+                    echo "Deploying to: ${params.DEPLOY_ENVIRONMENT}"
+                    echo "Image Tag: ${IMAGE_TAG}"
+                    echo "Skip Tests: ${params.SKIP_TESTS}"
                 }
             }
         }
         
         stage('ECR Login') {
             steps {
-                withCredentials([
-                    string(credentialsId: 'aws-access-key', variable: 'AWS_ACCESS_KEY_ID'),
-                    string(credentialsId: 'aws-secret-key', variable: 'AWS_SECRET_ACCESS_KEY')
-                ]) {
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-credentials',
+                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                ]]) {
                     sh """
-                        export AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID"
-                        export AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY"
-                        export AWS_DEFAULT_REGION=us-east-1
-                        
-                        echo "登录到 ECR..."
-                        aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 319998871902.dkr.ecr.us-east-1.amazonaws.com
-                        
-                        echo "✅ ECR 登录成功！"
+                        aws ecr get-login-password --region ${AWS_REGION} | \
+                        docker login --username AWS --password-stdin ${DOCKER_REGISTRY}
                     """
                 }
             }
@@ -68,6 +72,15 @@ pipeline {
             }
         }
         
+        stage('Run Tests') {
+            when {
+                expression { return !params.SKIP_TESTS }
+            }
+            steps {
+                sh 'python -m pytest tests/ -v || true'
+            }
+        }
+        
         stage('Push to ECR') {
             steps {
                 script {
@@ -81,39 +94,38 @@ pipeline {
         
         stage('Deploy to EKS') {
             steps {
-                withCredentials([
-                    string(credentialsId: 'aws-access-key', variable: 'AWS_ACCESS_KEY_ID'),
-                    string(credentialsId: 'aws-secret-key', variable: 'AWS_SECRET_ACCESS_KEY')
-                ]) {
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-credentials',
+                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                ]]) {
                     sh """
-                        export AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID"
-                        export AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY"
-                        export AWS_DEFAULT_REGION=us-east-1
-                        
-                        # 配置 kubectl
+                        # Configure kubectl
                         aws eks update-kubeconfig --region ${AWS_REGION} --name ${EKS_CLUSTER_NAME}
                         
-                        # 创建命名空间
+                        # Create namespace if not exists
                         kubectl apply -f kubernetes/namespace.yaml
                         
-                        # 部署 MySQL
-                        echo "部署 MySQL..."
+                        # Deploy MySQL first
+                        echo "Deploying MySQL to ${K8S_NAMESPACE}..."
                         kubectl apply -f kubernetes/mysql/ -n ${K8S_NAMESPACE}
                         
-                        # 等待 MySQL 就绪
-                        echo "等待 MySQL 启动..."
-                        sleep 60
+                        # Wait for MySQL to be ready
+                        echo "Waiting for MySQL to be ready..."
+                        timeout 300s bash -c 'until kubectl get pods -n ${K8S_NAMESPACE} -l app=mysql --field-selector=status.phase=Running --no-headers | grep -q .; do sleep 5; done'
                         
-                        # 部署应用
-                        echo "部署 Todo App..."
+                        # Deploy Todo Application
+                        echo "Deploying Todo App to ${K8S_NAMESPACE}..."
                         kubectl apply -f kubernetes/todo-app/ -n ${K8S_NAMESPACE}
                         
-                        # 更新镜像
+                        # Update deployment with new image
                         kubectl set image deployment/todo-app-deployment \\
                             todo-app=${DOCKER_REGISTRY}/${DOCKER_IMAGE}:${IMAGE_TAG} \\
                             -n ${K8S_NAMESPACE}
                         
-                        # 等待部署完成
+                        # Wait for rollout to complete
+                        echo "Waiting for rollout to complete..."
                         kubectl rollout status deployment/todo-app-deployment -n ${K8S_NAMESPACE} --timeout=300s
                     """
                 }
@@ -122,24 +134,30 @@ pipeline {
         
         stage('Verify Deployment') {
             steps {
-                sh """
-                    echo "✅ 部署完成！"
-                    kubectl get pods -n ${K8S_NAMESPACE}
-                    kubectl get services -n ${K8S_NAMESPACE}
-                """
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-credentials',
+                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                ]]) {
+                    sh """
+                        aws eks update-kubeconfig --region ${AWS_REGION} --name ${EKS_CLUSTER_NAME}
+                        ./scripts/verify-deployment.sh
+                    """
+                }
             }
         }
     }
     
     post {
         always {
-            echo "Pipeline 执行完成"
+            echo "Pipeline execution completed for ${params.DEPLOY_ENVIRONMENT}"
         }
         success {
-            echo "🎉 部署成功！构建号: ${env.BUILD_NUMBER}"
+            echo "✅ Deployment successful! Environment: ${params.DEPLOY_ENVIRONMENT}, Build: ${env.BUILD_NUMBER}"
         }
         failure {
-            echo "❌ 部署失败！构建号: ${env.BUILD_NUMBER}"
+            echo "❌ Deployment failed! Environment: ${params.DEPLOY_ENVIRONMENT}, Build: ${env.BUILD_NUMBER}"
         }
     }
 }
