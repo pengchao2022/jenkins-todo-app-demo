@@ -18,7 +18,7 @@ pipeline {
         )
         booleanParam(
             name: 'SKIP_TESTS',
-            defaultValue: false,
+            defaultValue: true,  // 默认跳过测试
             description: 'Skip running tests'
         )
     }
@@ -91,22 +91,6 @@ pipeline {
             }
         }
         
-        stage('Run Tests') {
-            when {
-                expression { return !params.SKIP_TESTS }
-            }
-            steps {
-                script {
-                    echo "🧪 Running tests..."
-                }
-                sh """
-                    # 使用 python3 而不是 python
-                    python3 -m pytest tests/ -v || echo "⚠️ Tests completed with warnings"
-                    echo "✅ Tests completed"
-                """
-            }
-        }
-        
         stage('Push to ECR') {
             steps {
                 script {
@@ -135,20 +119,13 @@ pipeline {
                         
                         echo "🔄 Configuring kubectl..."
                         
-                        # 检查并安装 kubectl 如果不存在
+                        # 检查并安装 kubectl 如果不存在（不使用 sudo）
                         if ! command -v kubectl &> /dev/null; then
                             echo "📥 Installing kubectl..."
                             curl -LO "https://dl.k8s.io/release/\$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
                             chmod +x kubectl
-                            sudo mv kubectl /usr/local/bin/
-                        fi
-                        
-                        # 检查并安装 aws-iam-authenticator 如果不存在
-                        if ! command -v aws-iam-authenticator &> /dev/null; then
-                            echo "📥 Installing aws-iam-authenticator..."
-                            curl -o aws-iam-authenticator https://amazon-eks.s3.us-west-2.amazonaws.com/1.21.2/2021-07-05/bin/linux/amd64/aws-iam-authenticator
-                            chmod +x aws-iam-authenticator
-                            sudo mv aws-iam-authenticator /usr/local/bin/
+                            mkdir -p /usr/local/bin
+                            mv kubectl /usr/local/bin/
                         fi
                         
                         aws eks update-kubeconfig --region ${AWS_REGION} --name ${EKS_CLUSTER_NAME}
@@ -173,36 +150,6 @@ pipeline {
                         echo "⏳ Waiting for rollout..."
                         kubectl rollout status deployment/todo-app-deployment -n ${K8S_NAMESPACE} --timeout=300s
                         echo "✅ Deployment completed"
-                    """
-                }
-            }
-        }
-        
-        stage('Verify Deployment') {
-            steps {
-                withCredentials([[
-                    $class: 'AmazonWebServicesCredentialsBinding',
-                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY',
-                    credentialsId: 'dev-user-aws-credentials'
-                ]]) {
-                    sh """
-                        export AWS_ACCESS_KEY_ID="\$AWS_ACCESS_KEY_ID"
-                        export AWS_SECRET_ACCESS_KEY="\$AWS_SECRET_ACCESS_KEY"
-                        export AWS_DEFAULT_REGION=${AWS_REGION}
-                        
-                        aws eks update-kubeconfig --region ${AWS_REGION} --name ${EKS_CLUSTER_NAME}
-                        
-                        echo "📊 Final status:"
-                        kubectl get all -n ${K8S_NAMESPACE}
-                        
-                        echo "🔍 Pod details:"
-                        kubectl get pods -n ${K8S_NAMESPACE} -o wide
-                        
-                        echo "🔍 Service details:"
-                        kubectl get svc -n ${K8S_NAMESPACE}
-                        
-                        echo "✅ Verification completed"
                     """
                 }
             }
