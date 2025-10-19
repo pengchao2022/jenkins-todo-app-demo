@@ -47,15 +47,20 @@ pipeline {
         
         stage('ECR Login') {
             steps {
-                withCredentials([[
-                    $class: 'AmazonWebServicesCredentialsBinding',
-                    credentialsId: 'aws-credentials',
-                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
-                ]]) {
+                withCredentials([
+                    string(credentialsId: 'aws-credentials', variable: 'AWS_ACCESS_KEY_ID'),
+                    string(credentialsId: 'aws-credentials', variable: 'AWS_SECRET_ACCESS_KEY')
+                ]) {
                     sh """
-                        aws ecr get-login-password --region ${AWS_REGION} | \
-                        docker login --username AWS --password-stdin ${DOCKER_REGISTRY}
+                        # 明确设置环境变量
+                        export AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID"
+                        export AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY"
+                        export AWS_DEFAULT_REGION=${AWS_REGION}
+                        
+                        echo "开始 ECR 登录..."
+                        aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${DOCKER_REGISTRY}
+                        
+                        echo "✅ ECR 登录成功！"
                     """
                 }
             }
