@@ -6,7 +6,15 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = Flask(__name__)
+# 获取当前文件的绝对路径
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+app = Flask(__name__,
+    static_folder=os.path.join(BASE_DIR, 'static'),
+    static_url_path='/static',
+    template_folder=os.path.join(BASE_DIR, 'templates')
+)
+
 db = Database()
 
 # Track if database is initialized
@@ -27,6 +35,9 @@ def initialize_database_on_first_request():
 
 @app.route('/')
 def index():
+    logger.info("Serving index.html")
+    logger.info(f"Static folder: {app.static_folder}")
+    logger.info(f"Template folder: {app.template_folder}")
     return render_template('index.html')
 
 @app.route('/api/todos', methods=['GET'])
