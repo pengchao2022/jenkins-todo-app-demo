@@ -1,5 +1,9 @@
 pipeline {
-    agent any
+    agent {
+        node {
+            label 'jenkins-agent'  // 指定使用 jenkins-agent 节点
+        }
+    }
     
     parameters {
         choice(
