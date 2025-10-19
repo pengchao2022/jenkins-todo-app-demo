@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mysql-config
+data:
+  init.sql: |
+    CREATE DATABASE IF NOT EXISTS todoapp;
+    USE todoapp;
+    
+    CREATE TABLE IF NOT EXISTS todos (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        task VARCHAR(255) NOT NULL,
+        completed BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    
+    CREATE USER IF NOT EXISTS 'todo_user'@'%' IDENTIFIED BY 'todopassword123';
+    GRANT ALL PRIVILEGES ON todoapp.* TO 'todo_user'@'%';
+    FLUSH PRIVILEGES;
+    
+    INSERT IGNORE INTO todos (task, completed) VALUES 
+    ('Learn Kubernetes', TRUE),
+    ('Deploy to EKS', FALSE),
+    ('Setup CI/CD with Jenkins', FALSE);

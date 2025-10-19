@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Todo App - EKS Deployment</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🚀 Todo App - EKS</h1>
+            <p class="subtitle">Powered by Jenkins CI/CD, EKS, and MySQL</p>
+        </header>
+        
+        <div class="todo-form">
+            <input type="text" id="taskInput" placeholder="What needs to be done?" maxlength="255">
+            <button onclick="addTodo()" id="addBtn">Add Todo</button>
+        </div>
+        
+        <div class="stats">
+            <span id="totalTodos">Total: 0</span>
+            <span id="completedTodos">Completed: 0</span>
+            <span id="pendingTodos">Pending: 0</span>
+        </div>
+        
+        <div id="todoList" class="todo-list"></div>
+        
+        <div class="app-info">
+            <p>Built with Flask, MySQL, and deployed on Amazon EKS with Jenkins CI/CD</p>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
