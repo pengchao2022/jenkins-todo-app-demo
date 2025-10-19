@@ -9,11 +9,21 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 db = Database()
 
-# Initialize database on startup
-@app.before_first_request
-def initialize_database():
-    logger.info("Initializing database...")
-    db.init_db()
+# Track if database is initialized
+database_initialized = False
+
+@app.before_request
+def initialize_database_on_first_request():
+    global database_initialized
+    if not database_initialized:
+        logger.info("Initializing database on first request...")
+        try:
+            db.init_db()
+            database_initialized = True
+            logger.info("Database initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize database: {e}")
+            # You might want to handle this differently based on your requirements
 
 @app.route('/')
 def index():
