@@ -62,8 +62,8 @@ pipeline {
                     credentialsId: 'dev-user-aws-credentials'
                 ]]) {
                     sh """
-                        export AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID"
-                        export AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY"
+                        export AWS_ACCESS_KEY_ID="\$AWS_ACCESS_KEY_ID"
+                        export AWS_SECRET_ACCESS_KEY="\$AWS_SECRET_ACCESS_KEY"
                         export AWS_DEFAULT_REGION=${AWS_REGION}
                         
                         echo "🔑 Testing AWS credentials..."
@@ -129,8 +129,8 @@ pipeline {
                     credentialsId: 'dev-user-aws-credentials'
                 ]]) {
                     sh """
-                        export AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID"
-                        export AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY"
+                        export AWS_ACCESS_KEY_ID="\$AWS_ACCESS_KEY_ID"
+                        export AWS_SECRET_ACCESS_KEY="\$AWS_SECRET_ACCESS_KEY"
                         export AWS_DEFAULT_REGION=${AWS_REGION}
                         
                         echo "🔄 Configuring kubectl..."
@@ -138,7 +138,7 @@ pipeline {
                         # 检查并安装 kubectl 如果不存在
                         if ! command -v kubectl &> /dev/null; then
                             echo "📥 Installing kubectl..."
-                            curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+                            curl -LO "https://dl.k8s.io/release/\$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
                             chmod +x kubectl
                             sudo mv kubectl /usr/local/bin/
                         fi
@@ -187,8 +187,8 @@ pipeline {
                     credentialsId: 'dev-user-aws-credentials'
                 ]]) {
                     sh """
-                        export AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID"
-                        export AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY"
+                        export AWS_ACCESS_KEY_ID="\$AWS_ACCESS_KEY_ID"
+                        export AWS_SECRET_ACCESS_KEY="\$AWS_SECRET_ACCESS_KEY"
                         export AWS_DEFAULT_REGION=${AWS_REGION}
                         
                         aws eks update-kubeconfig --region ${AWS_REGION} --name ${EKS_CLUSTER_NAME}
