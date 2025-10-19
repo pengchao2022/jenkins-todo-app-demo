@@ -1,5 +1,6 @@
 // Todo App JavaScript
 let todos = [];
+let isAdding = false; // 防止重复提交
 
 // 转义 HTML 特殊字符
 function escapeHtml(text) {
@@ -10,24 +11,20 @@ function escapeHtml(text) {
 
 // 显示消息
 function showMessage(message, type) {
-    // 移除现有消息
     const existingMessage = document.querySelector('.success-message, .error-message');
     if (existingMessage) {
         existingMessage.remove();
     }
     
-    // 创建新消息
     const messageDiv = document.createElement('div');
     messageDiv.className = type === 'success' ? 'success-message' : 'error-message';
     messageDiv.textContent = message;
     
-    // 插入到第一个 todo-card 之前
     const firstCard = document.querySelector('.todo-card');
     if (firstCard && firstCard.parentNode) {
         firstCard.parentNode.insertBefore(messageDiv, firstCard);
     }
     
-    // 3秒后自动消失
     setTimeout(() => {
         if (messageDiv.parentNode) {
             messageDiv.remove();
@@ -35,42 +32,13 @@ function showMessage(message, type) {
     }, 3000);
 }
 
-// DOM 加载完成后初始化
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('✅ Todo App initialized');
-    loadTodos();
-    
-    // 添加按钮点击事件
-    document.getElementById('addBtn').addEventListener('click', addTodo);
-    
-    // 添加回车键支持
-    document.getElementById('taskInput').addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') {
-            addTodo();
-        }
-    });
-});
-
-// 加载所有待办事项
-async function loadTodos() {
-    try {
-        console.log('📥 Loading todos...');
-        const response = await fetch('/api/todos');
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        todos = await response.json();
-        console.log('✅ Todos loaded:', todos);
-        updateTodoList();
-        updateStats();
-    } catch (error) {
-        console.error('❌ Error loading todos:', error);
-        showMessage('Error loading todos. Please refresh the page.', 'error');
-    }
-}
-
 // 添加新的待办事项
 async function addTodo() {
+    if (isAdding) {
+        console.log('⏳ Already adding, please wait...');
+        return;
+    }
+    
     console.log('🎯 addTodo function called');
     const taskInput = document.getElementById('taskInput');
     const task = taskInput.value.trim();
@@ -85,11 +53,15 @@ async function addTodo() {
         return;
     }
     
+    isAdding = true;
+    
     try {
-        // 禁用按钮防止重复点击
         const addBtn = document.getElementById('addBtn');
+        const originalText = addBtn.innerHTML;
         addBtn.disabled = true;
         addBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Adding...';
+        
+        console.log('📤 Sending request to add todo:', task);
         
         const response = await fetch('/api/todos', {
             method: 'POST',
@@ -106,22 +78,79 @@ async function addTodo() {
         const newTodo = await response.json();
         console.log('✅ Todo added:', newTodo);
         
-        // 清空输入框
         taskInput.value = '';
-        
-        // 重新加载所有待办事项
         await loadTodos();
-        
         showMessage('Task added successfully!', 'success');
         
     } catch (error) {
         console.error('❌ Error adding todo:', error);
         showMessage('Error adding task. Please try again.', 'error');
     } finally {
-        // 重新启用按钮
         const addBtn = document.getElementById('addBtn');
         addBtn.disabled = false;
         addBtn.innerHTML = '<i class="fas fa-plus"></i> Add';
+        isAdding = false;
+    }
+}
+
+// 一次性初始化
+function initializeApp() {
+    console.log('✅ Initializing Todo App...');
+    
+    // 移除所有现有的事件监听器
+    const addBtn = document.getElementById('addBtn');
+    const newAddBtn = addBtn.cloneNode(true);
+    addBtn.parentNode.replaceChild(newAddBtn, addBtn);
+    
+    const taskInput = document.getElementById('taskInput');
+    const newTaskInput = taskInput.cloneNode(true);
+    taskInput.parentNode.replaceChild(newTaskInput, taskInput);
+    
+    // 重新绑定事件
+    document.getElementById('addBtn').addEventListener('click', handleAddTodo);
+    document.getElementById('taskInput').addEventListener('keypress', handleEnterKey);
+    
+    loadTodos();
+}
+
+// 处理添加按钮点击
+function handleAddTodo(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    console.log('🖱️ Add button clicked (event listener)');
+    addTodo();
+}
+
+// 处理回车键
+function handleEnterKey(event) {
+    if (event.key === 'Enter') {
+        event.preventDefault();
+        console.log('↵ Enter key pressed (event listener)');
+        addTodo();
+    }
+}
+
+// DOM 加载完成后初始化
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('📄 DOM Content Loaded');
+    initializeApp();
+});
+
+// 加载所有待办事项
+async function loadTodos() {
+    try {
+        console.log('📥 Loading todos...');
+        const response = await fetch('/api/todos');
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        todos = await response.json();
+        console.log('✅ Todos loaded. Count:', todos.length);
+        updateTodoList();
+        updateStats();
+    } catch (error) {
+        console.error('❌ Error loading todos:', error);
+        showMessage('Error loading todos. Please refresh the page.', 'error');
     }
 }
 
@@ -134,8 +163,7 @@ async function toggleTodo(id) {
             return;
         }
         
-        console.log('🔄 Toggling todo:', id, 'from', todo.completed, 'to', !todo.completed);
-        
+        console.log('🔄 Toggling todo:', id);
         const response = await fetch(`/api/todos/${id}`, {
             method: 'PUT',
             headers: {
@@ -149,7 +177,6 @@ async function toggleTodo(id) {
         }
         
         await loadTodos();
-        showMessage('Task updated!', 'success');
         
     } catch (error) {
         console.error('❌ Error updating todo:', error);
@@ -165,7 +192,6 @@ async function deleteTodo(id) {
     
     try {
         console.log('🗑️ Deleting todo:', id);
-        
         const response = await fetch(`/api/todos/${id}`, {
             method: 'DELETE'
         });
@@ -175,7 +201,6 @@ async function deleteTodo(id) {
         }
         
         await loadTodos();
-        showMessage('Task deleted!', 'success');
         
     } catch (error) {
         console.error('❌ Error deleting todo:', error);
@@ -204,7 +229,7 @@ function updateTodoList() {
     updateStats();
 }
 
-// 更新 todo 项创建函数
+// 创建待办事项元素
 function createTodoElement(todo) {
     const todoDiv = document.createElement('div');
     todoDiv.className = 'todo-item';
@@ -234,6 +259,4 @@ function updateStats() {
     document.getElementById('totalTodos').textContent = totalTodos;
     document.getElementById('completedTodos').textContent = completedTodos;
     document.getElementById('pendingTodos').textContent = pendingTodos;
-    
-    console.log('📊 Stats updated - Total:', totalTodos, 'Completed:', completedTodos, 'Pending:', pendingTodos);
 }
