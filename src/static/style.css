@@ -47,7 +47,7 @@ body {
     background: rgba(255, 255, 255, 0.95);
     backdrop-filter: blur(10px);
     border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-    padding: 2rem 0;
+    padding: 1.5rem 0;
     text-align: center;
 }
 
@@ -62,7 +62,7 @@ body {
     align-items: center;
     justify-content: center;
     gap: 1rem;
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.75rem;
 }
 
 .logo i {
@@ -81,10 +81,24 @@ body {
     -webkit-text-fill-color: transparent;
 }
 
+/* Header Subtitles */
+.header-subtitles {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
 .subtitle {
     color: var(--gray-600);
     font-size: 1.1rem;
     font-weight: 500;
+    margin: 0;
+}
+
+.subtitle.author {
+    color: var(--gray-500);
+    font-size: 1rem;
+    font-style: italic;
 }
 
 /* Main Content */
@@ -376,6 +390,23 @@ body {
     }
 }
 
+/* Empty State */
+.empty-state {
+    text-align: center;
+    padding: 3rem 2rem;
+    color: var(--gray-500);
+}
+
+.empty-state i {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+}
+
+.empty-state p {
+    font-size: 1.1rem;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
     .main-content {
@@ -396,6 +427,22 @@ body {
         font-size: 2rem;
     }
     
+    .header-subtitles {
+        gap: 0.5rem;
+    }
+    
+    .subtitle {
+        font-size: 1rem;
+    }
+    
+    .subtitle.author {
+        font-size: 0.9rem;
+    }
+    
+    .app-header {
+        padding: 1rem 0;
+    }
+    
     .input-group {
         flex-direction: column;
     }
@@ -411,21 +458,47 @@ body {
     .todo-actions {
         opacity: 1;
     }
+    
+    .footer-content p {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
 }
 
-/* Empty State */
-.empty-state {
-    text-align: center;
-    padding: 3rem 2rem;
-    color: var(--gray-500);
+/* Loading States */
+.loading {
+    opacity: 0.6;
+    pointer-events: none;
 }
 
-.empty-state i {
-    font-size: 3rem;
+.btn-primary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.btn-primary:disabled:hover {
+    transform: none;
+    box-shadow: none;
+}
+
+/* Success and Error States */
+.success-message {
+    background: var(--success-color);
+    color: white;
+    padding: 1rem;
+    border-radius: var(--border-radius);
     margin-bottom: 1rem;
-    opacity: 0.5;
+    text-align: center;
+    animation: slideIn 0.3s ease;
 }
 
-.empty-state p {
-    font-size: 1.1rem;
+.error-message {
+    background: var(--danger-color);
+    color: white;
+    padding: 1rem;
+    border-radius: var(--border-radius);
+    margin-bottom: 1rem;
+    text-align: center;
+    animation: slideIn 0.3s ease;
 }
