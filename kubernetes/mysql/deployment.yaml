@@ -46,26 +46,26 @@ spec:
             memory: "256Mi"
             cpu: "250m"
           limits:
-            memory: "512Gi"
+            memory: "512Mi"  # 修复：应该是 Mi 不是 Gi
             cpu: "500m"
+        # 修复探针配置
         livenessProbe:
           tcpSocket:
             port: 3306
-          initialDelaySeconds: 30
-          periodSeconds: 10
+          initialDelaySeconds: 60  # 增加初始延迟，让 MySQL 完全启动
+          periodSeconds: 20
+          timeoutSeconds: 5
+          failureThreshold: 3
         readinessProbe:
           exec:
             command:
-            - mysql
-            - -h
-            - 127.0.0.1
-            - -u
-            - root
-            - -p$(MYSQL_ROOT_PASSWORD)
-            - -e
-            - "SELECT 1"
-          initialDelaySeconds: 5
-          periodSeconds: 5
+            - sh
+            - -c
+            - "mysql -h 127.0.0.1 -u root -p${MYSQL_ROOT_PASSWORD} -e 'SELECT 1;'"
+          initialDelaySeconds: 30  # 增加初始延迟
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
       volumes:
       - name: mysql-storage
         persistentVolumeClaim:

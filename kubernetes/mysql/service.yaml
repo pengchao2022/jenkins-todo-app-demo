@@ -2,12 +2,14 @@ apiVersion: v1
 kind: Service
 metadata:
   name: mysql-service
+  namespace: todo-app-dev
   labels:
     app: mysql
 spec:
+  type: ClusterIP
+  #clusterIP: 10.100.200.100  # 或者删除这行让 Kubernetes 自动分配
   ports:
   - port: 3306
     targetPort: 3306
   selector:
     app: mysql
-  clusterIP: None
