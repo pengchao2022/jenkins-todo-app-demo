@@ -5,30 +5,96 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Todo App - EKS Deployment</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>🚀 Todo App - EKS</h1>
-            <p class="subtitle">Powered by Jenkins CI/CD, EKS, and MySQL</p>
+    <div class="app-container">
+        <!-- Header Section -->
+        <header class="app-header">
+            <div class="header-content">
+                <div class="logo">
+                    <i class="fas fa-rocket"></i>
+                    <h1>Todo App</h1>
+                </div>
+                <p class="subtitle">Powered by Jenkins CI/CD, EKS & MySQL</p>
+            </div>
         </header>
-        
-        <div class="todo-form">
-            <input type="text" id="taskInput" placeholder="What needs to be done?" maxlength="255">
-            <button onclick="addTodo()" id="addBtn">Add Todo</button>
-        </div>
-        
-        <div class="stats">
-            <span id="totalTodos">Total: 0</span>
-            <span id="completedTodos">Completed: 0</span>
-            <span id="pendingTodos">Pending: 0</span>
-        </div>
-        
-        <div id="todoList" class="todo-list"></div>
-        
-        <div class="app-info">
-            <p>Built with Flask, MySQL, and deployed on Amazon EKS with Jenkins CI/CD</p>
-        </div>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Add Todo Form -->
+            <div class="todo-card">
+                <div class="card-header">
+                    <h2><i class="fas fa-plus-circle"></i> Add New Task</h2>
+                </div>
+                <div class="todo-form">
+                    <div class="input-group">
+                        <input type="text" id="taskInput" placeholder="What needs to be done?" maxlength="255">
+                        <button onclick="addTodo()" id="addBtn" class="btn-primary">
+                            <i class="fas fa-plus"></i> Add
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Stats Card -->
+            <div class="stats-card">
+                <div class="stat-item">
+                    <div class="stat-icon total">
+                        <i class="fas fa-list"></i>
+                    </div>
+                    <div class="stat-info">
+                        <span class="stat-number" id="totalTodos">0</span>
+                        <span class="stat-label">Total Tasks</span>
+                    </div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-icon completed">
+                        <i class="fas fa-check-circle"></i>
+                    </div>
+                    <div class="stat-info">
+                        <span class="stat-number" id="completedTodos">0</span>
+                        <span class="stat-label">Completed</span>
+                    </div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-icon pending">
+                        <i class="fas fa-clock"></i>
+                    </div>
+                    <div class="stat-info">
+                        <span class="stat-number" id="pendingTodos">0</span>
+                        <span class="stat-label">Pending</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Todo List -->
+            <div class="todo-card">
+                <div class="card-header">
+                    <h2><i class="fas fa-tasks"></i> Your Tasks</h2>
+                </div>
+                <div id="todoList" class="todo-list">
+                    <!-- Tasks will be populated here -->
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="app-footer">
+            <div class="footer-content">
+                <p>
+                    <i class="fas fa-code"></i> 
+                    Built with Flask, MySQL, and deployed on Amazon EKS with Jenkins CI/CD
+                </p>
+                <div class="tech-stack">
+                    <span class="tech-tag">Flask</span>
+                    <span class="tech-tag">MySQL</span>
+                    <span class="tech-tag">EKS</span>
+                    <span class="tech-tag">Jenkins</span>
+                    <span class="tech-tag">Docker</span>
+                </div>
+            </div>
+        </footer>
     </div>
 
     <script src="{{ url_for('static', filename='script.js') }}"></script>
