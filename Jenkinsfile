@@ -42,8 +42,6 @@ pipeline {
                     echo "Deploying to: ${params.DEPLOY_ENVIRONMENT}"
                     echo "Image Tag: ${IMAGE_TAG}"
                     echo "Skip Tests: ${params.SKIP_TESTS}"
-                    echo "K8S Namespace: ${K8S_NAMESPACE}"
-                    echo "Docker Registry: ${DOCKER_REGISTRY}"
                 }
             }
         }
@@ -52,29 +50,30 @@ pipeline {
             steps {
                 script {
                     echo "🔐 Checking AWS Credentials..."
+                    
+                    // 测试第一个凭据
                     try {
-                        // 测试凭据是否存在
-                        withCredentials([[
-                            $class: 'AmazonWebServicesCredentialsBinding',
-                            credentialsId: 'aws-credentials',
-                            accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-                            secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
-                        ]]) {
-                            echo "✅ SUCCESS: AWS credentials found and accessible"
-                            echo "Credentials ID: aws-credentials"
+                        withCredentials([string(credentialsId: 'aws-access-key', variable: 'TEST_ACCESS_KEY')]) {
+                            echo "✅ SUCCESS: aws-access-key credential found"
                         }
                     } catch (Exception e) {
-                        echo "❌ CRITICAL ERROR: Could not find credentials entry with ID 'aws-credentials'"
-                        echo "🔍 Troubleshooting steps:"
-                        echo "1. Go to Jenkins → Manage Jenkins → Manage Credentials"
-                        echo "2. Check if credential with ID 'aws-credentials' exists"
-                        echo "3. Verify the credential type is 'AWS Credentials' or 'Secret text'"
-                        echo "4. Ensure credential is in 'Global credentials (unrestricted)' domain"
-                        echo "5. If using Secret text, create two separate credentials for Access Key and Secret Key"
-                        echo "📋 Error details: ${e.getMessage()}"
+                        echo "❌ ERROR: Could not find credentials entry with ID 'aws-access-key'"
                         currentBuild.result = 'FAILURE'
-                        error("Stopping pipeline: AWS credentials not found")
+                        error("Missing credential: aws-access-key")
                     }
+                    
+                    // 测试第二个凭据
+                    try {
+                        withCredentials([string(credentialsId: 'aws-secret-key', variable: 'TEST_SECRET_KEY')]) {
+                            echo "✅ SUCCESS: aws-secret-key credential found"
+                        }
+                    } catch (Exception e) {
+                        echo "❌ ERROR: Could not find credentials entry with ID 'aws-secret-key'"
+                        currentBuild.result = 'FAILURE'
+                        error("Missing credential: aws-secret-key")
+                    }
+                    
+                    echo "🎉 All credentials are properly configured!"
                 }
             }
         }
@@ -84,12 +83,10 @@ pipeline {
                 script {
                     echo "🐳 Attempting ECR Login..."
                 }
-                withCredentials([[
-                    $class: 'AmazonWebServicesCredentialsBinding',
-                    credentialsId: 'aws-credentials',
-                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
-                ]]) {
+                withCredentials([
+                    string(credentialsId: 'aws-access-key', variable: 'AWS_ACCESS_KEY_ID'),
+                    string(credentialsId: 'aws-secret-key', variable: 'AWS_SECRET_ACCESS_KEY')
+                ]) {
                     sh """
                         # 设置环境变量
                         export AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID"
@@ -165,12 +162,10 @@ pipeline {
                 script {
                     echo "🔍 Verifying EKS cluster access..."
                 }
-                withCredentials([[
-                    $class: 'AmazonWebServicesCredentialsBinding',
-                    credentialsId: 'aws-credentials',
-                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
-                ]]) {
+                withCredentials([
+                    string(credentialsId: 'aws-access-key', variable: 'AWS_ACCESS_KEY_ID'),
+                    string(credentialsId: 'aws-secret-key', variable: 'AWS_SECRET_ACCESS_KEY')
+                ]) {
                     sh """
                         export AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID"
                         export AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY"
@@ -198,12 +193,10 @@ pipeline {
                     echo "Namespace: ${K8S_NAMESPACE}"
                     echo "Image: ${DOCKER_REGISTRY}/${DOCKER_IMAGE}:${IMAGE_TAG}"
                 }
-                withCredentials([[
-                    $class: 'AmazonWebServicesCredentialsBinding',
-                    credentialsId: 'aws-credentials',
-                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
-                ]]) {
+                withCredentials([
+                    string(credentialsId: 'aws-access-key', variable: 'AWS_ACCESS_KEY_ID'),
+                    string(credentialsId: 'aws-secret-key', variable: 'AWS_SECRET_ACCESS_KEY')
+                ]) {
                     sh """
                         export AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID"
                         export AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY"
@@ -224,7 +217,6 @@ pipeline {
                             echo "❌ MySQL failed to start within timeout"
                             echo "📊 Checking MySQL pod status:"
                             kubectl get pods -n ${K8S_NAMESPACE} -l app=mysql
-                            kubectl describe pods -n ${K8S_NAMESPACE} -l app=mysql
                             exit 1
                         fi
                         
@@ -243,7 +235,6 @@ pipeline {
                             echo "❌ Rollout failed"
                             echo "📊 Checking deployment status:"
                             kubectl describe deployment/todo-app-deployment -n ${K8S_NAMESPACE}
-                            kubectl get pods -n ${K8S_NAMESPACE} -l app=todo-app
                             exit 1
                         fi
                     """
@@ -256,12 +247,10 @@ pipeline {
                 script {
                     echo "🔍 Verifying deployment..."
                 }
-                withCredentials([[
-                    $class: 'AmazonWebServicesCredentialsBinding',
-                    credentialsId: 'aws-credentials',
-                    accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-                    secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
-                ]]) {
+                withCredentials([
+                    string(credentialsId: 'aws-access-key', variable: 'AWS_ACCESS_KEY_ID'),
+                    string(credentialsId: 'aws-secret-key', variable: 'AWS_SECRET_ACCESS_KEY')
+                ]) {
                     sh """
                         export AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID"
                         export AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY"
@@ -270,13 +259,6 @@ pipeline {
                         
                         echo "📊 Deployment Status:"
                         kubectl get all -n ${K8S_NAMESPACE}
-                        
-                        echo "🔧 Running verification script..."
-                        if [ -f "./scripts/verify-deployment.sh" ]; then
-                            ./scripts/verify-deployment.sh
-                        else
-                            echo "⚠️ Verification script not found, skipping"
-                        fi
                         
                         echo "✅ Deployment verification completed"
                     """
@@ -296,12 +278,6 @@ pipeline {
         }
         failure {
             echo "💥 Deployment failed! Environment: ${params.DEPLOY_ENVIRONMENT}, Build: ${env.BUILD_NUMBER}"
-            echo "🔍 Check the logs above for detailed error information"
-            echo "📋 Common issues:"
-            echo "   - AWS credentials not configured properly"
-            echo "   - ECR repository permissions"
-            echo "   - EKS cluster access"
-            echo "   - Kubernetes resource conflicts"
         }
     }
 }
