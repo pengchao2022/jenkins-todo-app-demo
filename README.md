@@ -26,7 +26,7 @@ when a push event in github, the jenkins will build the app automatically
 
 - here's the pods running in EKS
 
-![pods](./console_output.png)
+![pods](./todo_app_pods.png)
 
 here's the website looks like:
 
@@ -39,3 +39,7 @@ here's the website looks like:
 - here's the Jenkins pipeline stage looks like
 
 ![stage](./jenkins_stageview.png)
+
+- here's the Jenkins console outputs looks like
+
+![outputs](./console_output.png)
