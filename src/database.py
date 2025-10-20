@@ -174,6 +174,8 @@ class Database:
                     cursor.close()
         return False
     
+
+    
     def health_check(self):
         try:
             logger.info("🏥 Performing database health check")
