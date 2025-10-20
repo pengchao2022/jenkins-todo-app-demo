@@ -1,6 +1,7 @@
 // Todo App JavaScript
 let todos = [];
-let isAdding = false; // 防止重复提交
+let isAdding = false;
+let isInitialized = false; // 防止重复初始化
 
 // 转义 HTML 特殊字符
 function escapeHtml(text) {
@@ -39,7 +40,7 @@ async function addTodo() {
         return;
     }
     
-    console.log('🎯 addTodo function called');
+    console.log('🎯 addTodo function called - SHOULD ONLY SEE THIS ONCE PER CLICK');
     const taskInput = document.getElementById('taskInput');
     const task = taskInput.value.trim();
     
@@ -57,11 +58,10 @@ async function addTodo() {
     
     try {
         const addBtn = document.getElementById('addBtn');
-        const originalText = addBtn.innerHTML;
         addBtn.disabled = true;
         addBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Adding...';
         
-        console.log('📤 Sending request to add todo:', task);
+        console.log('📤 Sending ONE request to add todo:', task);
         
         const response = await fetch('/api/todos', {
             method: 'POST',
@@ -76,10 +76,14 @@ async function addTodo() {
         }
         
         const newTodo = await response.json();
-        console.log('✅ Todo added:', newTodo);
+        console.log('✅ Todo added, response:', newTodo);
         
+        // 清空输入框
         taskInput.value = '';
+        
+        // 重新加载列表（这里应该只看到一个新任务）
         await loadTodos();
+        
         showMessage('Task added successfully!', 'success');
         
     } catch (error) {
@@ -93,59 +97,64 @@ async function addTodo() {
     }
 }
 
-// 一次性初始化
+// 一次性初始化 - 确保只运行一次
 function initializeApp() {
-    console.log('✅ Initializing Todo App...');
+    if (isInitialized) {
+        console.log('⚠️ App already initialized, skipping...');
+        return;
+    }
     
-    // 移除所有现有的事件监听器
+    console.log('✅ INITIALIZING APP - THIS SHOULD ONLY RUN ONCE');
+    isInitialized = true;
+    
+    // 移除所有可能重复的事件监听器
     const addBtn = document.getElementById('addBtn');
+    const taskInput = document.getElementById('taskInput');
+    
+    // 克隆并替换元素来移除所有事件监听器
     const newAddBtn = addBtn.cloneNode(true);
     addBtn.parentNode.replaceChild(newAddBtn, addBtn);
     
-    const taskInput = document.getElementById('taskInput');
     const newTaskInput = taskInput.cloneNode(true);
     taskInput.parentNode.replaceChild(newTaskInput, taskInput);
     
-    // 重新绑定事件
-    document.getElementById('addBtn').addEventListener('click', handleAddTodo);
-    document.getElementById('taskInput').addEventListener('keypress', handleEnterKey);
+    // 重新绑定事件 - 只绑定一次
+    document.getElementById('addBtn').addEventListener('click', function(event) {
+        console.log('🖱️ Add button CLICKED - EVENT LISTENER');
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        addTodo();
+    }, { once: false }); // 确保不是一次性监听器
+    
+    document.getElementById('taskInput').addEventListener('keypress', function(event) {
+        if (event.key === 'Enter') {
+            console.log('↵ Enter key PRESSED - EVENT LISTENER');
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            addTodo();
+        }
+    }, { once: false });
     
     loadTodos();
 }
 
-// 处理添加按钮点击
-function handleAddTodo(event) {
-    event.preventDefault();
-    event.stopPropagation();
-    console.log('🖱️ Add button clicked (event listener)');
-    addTodo();
-}
-
-// 处理回车键
-function handleEnterKey(event) {
-    if (event.key === 'Enter') {
-        event.preventDefault();
-        console.log('↵ Enter key pressed (event listener)');
-        addTodo();
-    }
-}
-
 // DOM 加载完成后初始化
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('📄 DOM Content Loaded');
-    initializeApp();
+    console.log('📄 DOM Content Loaded - Setting up initialization');
+    // 使用 setTimeout 确保所有元素都已加载
+    setTimeout(initializeApp, 100);
 });
 
 // 加载所有待办事项
 async function loadTodos() {
     try {
-        console.log('📥 Loading todos...');
+        console.log('📥 Loading todos from server...');
         const response = await fetch('/api/todos');
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
         todos = await response.json();
-        console.log('✅ Todos loaded. Count:', todos.length);
+        console.log('✅ Todos loaded. Count:', todos.length, 'Tasks:', todos.map(t => t.task));
         updateTodoList();
         updateStats();
     } catch (error) {
@@ -158,12 +167,8 @@ async function loadTodos() {
 async function toggleTodo(id) {
     try {
         const todo = todos.find(t => t.id === id);
-        if (!todo) {
-            console.log('❌ Todo not found:', id);
-            return;
-        }
+        if (!todo) return;
         
-        console.log('🔄 Toggling todo:', id);
         const response = await fetch(`/api/todos/${id}`, {
             method: 'PUT',
             headers: {
@@ -172,9 +177,7 @@ async function toggleTodo(id) {
             body: JSON.stringify({ completed: !todo.completed })
         });
         
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         
         await loadTodos();
         
@@ -186,19 +189,11 @@ async function toggleTodo(id) {
 
 // 删除待办事项
 async function deleteTodo(id) {
-    if (!confirm('Are you sure you want to delete this task?')) {
-        return;
-    }
+    if (!confirm('Are you sure you want to delete this task?')) return;
     
     try {
-        console.log('🗑️ Deleting todo:', id);
-        const response = await fetch(`/api/todos/${id}`, {
-            method: 'DELETE'
-        });
-        
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
+        const response = await fetch(`/api/todos/${id}`, { method: 'DELETE' });
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         
         await loadTodos();
         
